@@ -1,5 +1,8 @@
 debug
 target
+tests/examples
+
+*.svg
 
 **/*.rs.bk
 
