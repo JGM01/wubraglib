@@ -1,14 +1,23 @@
 use std::path::Path;
 
+pub struct Chunk {
+    pub doc_id: String,       // id of the document that the chunk is attached to
+    pub text: String,         // content of the chunk
+    pub span: (usize, usize), // line to line span of the chunk within the document
+    pub meta: ChunkMetaData,  // metadata :)
+}
+
+pub struct ChunkMetaData {}
+
 #[derive(Debug, Clone)]
 pub struct Document {
     pub id: String,
     pub text: String,
-    pub meta: Meta,
+    pub meta: DocumentMetadata,
 }
 
 #[derive(Debug, Clone)]
-pub struct Meta {
+pub struct DocumentMetadata {
     extension: Option<String>,
     size_bytes: u64,
 }
@@ -23,7 +32,7 @@ fn f2doc(root: &Path, relative_path: &Path) -> Option<Document> {
         Ok(txt) => txt,
         Err(_) => return None,
     };
-    let meta = Meta {
+    let meta = DocumentMetadata {
         extension: path
             .extension()
             .and_then(|e| e.to_str())

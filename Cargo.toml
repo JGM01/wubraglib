@@ -11,6 +11,7 @@ src = "src/lib.rs"
 criterion = { version = "0.7.0" , features = ["html_reports"] }
 jwalk = "0.8.1"
 rayon = "1.11.0"
+tree-sitter = "0.25.10"
 walkdir = "2.5.0"
 
 [[test]]
