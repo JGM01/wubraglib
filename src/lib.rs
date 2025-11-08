@@ -91,13 +91,28 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
         let mut qmatches = cursor.matches(&query, root, text_callback);
 
         while let Some(m) = qmatches.next() {
-            for capture in m.captures {}
+            for capture in m.captures {
+                let node = capture.node;
+                let sub_chunks = traverse_and_chunk(&node, doc_text, next_id, doc_id, None);
+
+                let chunk_text = &doc_text[node.start_byte()..node.end_byte()];
+            }
         }
     } else {
         chunks = naive_chunk_document(doc_text, doc_id, next_id);
     };
 
     chunks
+}
+
+fn traverse_and_chunk(
+    node: &Node,
+    doc_text: &str,
+    next_id: &AtomicU32,
+    doc_id: u32,
+    parent_id: Option<u32>,
+) -> Vec<Chunk> {
+    todo!()
 }
 
 fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec<Chunk> {
