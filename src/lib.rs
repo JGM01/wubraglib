@@ -1,4 +1,10 @@
-use std::{collections::HashMap, path::Path, sync::atomic::AtomicU32};
+use jwalk::WalkDir;
+use lazy_static::lazy_static;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use std::{collections::HashMap, iter, path::Path, sync::atomic::AtomicU32};
+use tree_sitter::{
+    Language, Node, Parser, Query, QueryCursor, QueryMatch, QueryMatches, StreamingIterator,
+};
 
 pub struct Chunk {
     pub id: u32,                // primary key, u32 because linux kernel is like 40million LOC
@@ -68,9 +74,25 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
         let tree = parser.parse(doc_text, None).expect("Parse failed");
         let root = tree.root_node();
 
-        let query = get_query_from_extension(doc_ext);
+        let query_str = get_query_from_extension(doc_ext);
 
-        todo!()
+        let query = Query::new(lang, query_str).expect("invalid query");
+
+        let mut cursor = QueryCursor::new();
+        let b_text = doc_text.as_bytes();
+
+        let text_callback = |node: Node| {
+            let start = node.start_byte() as usize;
+            let end = node.end_byte() as usize;
+            let slice = &b_text[start..end];
+            iter::once(slice)
+        };
+
+        let mut qmatches = cursor.matches(&query, root, text_callback);
+
+        while let Some(m) = qmatches.next() {
+            for capture in m.captures {}
+        }
     } else {
         chunks = naive_chunk_document(doc_text, doc_id, next_id);
     };
@@ -82,14 +104,9 @@ fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec
     todo!()
 }
 
-fn get_query_from_extension(extension: &str) -> Query {
+fn get_query_from_extension(extension: &str) -> &str {
     todo!()
 }
-
-use jwalk::WalkDir;
-use lazy_static::lazy_static;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use tree_sitter::{Language, Parser, Query};
 
 static ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
