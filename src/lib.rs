@@ -1,17 +1,19 @@
-use std::path::Path;
+use std::{path::Path, sync::atomic::AtomicU32};
 
 pub struct Chunk {
-    pub doc_id: String,       // id of the document that the chunk is attached to
-    pub text: String,         // content of the chunk
-    pub span: (usize, usize), // line to line span of the chunk within the document
-    pub meta: ChunkMetaData,  // metadata :)
+    pub id: u32,                // primary key, u32 because linux kernel is like 40million LOC
+    pub doc_id: u32,            // foreign key id of the document that the chunk is attached to
+    pub text: String,           // content of the chunk
+    pub chunk_type: String,     // whatever is returned by node.kind() with tree-sitter
+    pub parent_id: Option<u32>, // could have a parent, could not
+    pub children_ids: Vec<u32>, // children id vec (no Option because it can just be empty)
+    pub token_count: usize,     // amount of tokens for logic stuff
 }
-
-pub struct ChunkMetaData {}
 
 #[derive(Debug, Clone)]
 pub struct Document {
-    pub id: String,
+    pub id: u32,
+    pub path: String,
     pub text: String,
     pub meta: DocumentMetadata,
 }
@@ -24,6 +26,8 @@ pub struct DocumentMetadata {
 
 use jwalk::WalkDir;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+static ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 fn f2doc(root: &Path, relative_path: &Path) -> Option<Document> {
     let path = root.join(relative_path);
@@ -41,7 +45,8 @@ fn f2doc(root: &Path, relative_path: &Path) -> Option<Document> {
     };
 
     Some(Document {
-        id: relative_path.display().to_string(),
+        id: ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+        path: relative_path.display().to_string(),
         text,
         meta,
     })
