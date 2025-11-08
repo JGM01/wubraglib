@@ -1,11 +1,18 @@
 use jwalk::WalkDir;
 use lazy_static::lazy_static;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::{collections::HashMap, iter, path::Path, sync::atomic::AtomicU32};
+use std::{
+    collections::HashMap,
+    iter,
+    path::Path,
+    sync::atomic::{AtomicU32, Ordering},
+};
+use tiktoken_rs::o200k_base;
 use tree_sitter::{
     Language, Node, Parser, Query, QueryCursor, QueryMatch, QueryMatches, StreamingIterator,
 };
 
+#[derive(Debug, Clone)]
 pub struct Chunk {
     pub id: u32,                // primary key, u32 because linux kernel is like 40million LOC
     pub doc_id: u32,            // foreign key id of the document that the chunk is attached to
@@ -39,7 +46,7 @@ lazy_static! {
     };
 }
 
-fn chunk_all_documents(docs: &[Document]) -> (Vec<Chunk>, HashMap<u32, usize>) {
+pub fn chunk_all_documents(docs: &[Document]) -> (Vec<Chunk>, HashMap<u32, usize>) {
     let next_id = AtomicU32::new(0);
 
     let doc_chunks_vec: Vec<Vec<Chunk>> = docs
@@ -93,9 +100,29 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
         while let Some(m) = qmatches.next() {
             for capture in m.captures {
                 let node = capture.node;
-                let sub_chunks = traverse_and_chunk(&node, doc_text, next_id, doc_id, None);
+                let mut children = traverse_and_chunk(&node, doc_text, next_id, doc_id, None);
 
                 let chunk_text = &doc_text[node.start_byte()..node.end_byte()];
+                let chunk_token_count = o200k_base().unwrap().encode_ordinary(doc_text).len();
+                let id = next_id.fetch_add(1, Ordering::SeqCst);
+
+                let chunk = Chunk {
+                    id,
+                    doc_id,
+                    text: chunk_text.to_string(),
+                    chunk_type: node.kind().to_string(),
+                    parent_id: None,
+                    children_ids: children.iter().map(|c| c.id).collect(),
+                    token_count: chunk_token_count,
+                };
+
+                for child in &mut children {
+                    if child.parent_id.is_none() {
+                        child.parent_id = Some(id);
+                    }
+                }
+                chunks.extend(children);
+                chunks.push(chunk);
             }
         }
     } else {

@@ -12,7 +12,7 @@ criterion = { version = "0.7.0" , features = ["html_reports"] }
 jwalk = "0.8.1"
 lazy_static = "1.5.0"
 rayon = "1.11.0"
-tiktoken = "1.0.1"
+tiktoken-rs = "0.7.0"
 tree-sitter = "0.25.10"
 tree-sitter-rust = "0.24.0"
 tree-sitter-toml = "0.20.0"
@@ -28,4 +28,7 @@ debug = true
 
 [[bench]]
 name = "document_collection"
+harness = false
+[[bench]]
+name = "document_chunking"
 harness = false
