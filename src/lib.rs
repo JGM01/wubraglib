@@ -11,9 +11,7 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 use tiktoken_rs::o200k_base;
-use tree_sitter::{
-    Language, Node, Parser, Query, QueryCursor, QueryMatch, QueryMatches, StreamingIterator,
-};
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, QueryMatch, QueryMatches};
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
@@ -43,8 +41,8 @@ pub struct DocumentMetadata {
 lazy_static! {
     static ref LANGUAGE_MAP: HashMap<&'static str, Language> = {
         let mut m = HashMap::new();
-        m.insert("rs", tree_sitter_rust::LANGUAGE.into());
-        m.insert("toml", tree_sitter_rust::LANGUAGE.into());
+        m.insert("rs", tree_sitter_rust::language());
+        m.insert("toml", tree_sitter_toml::language());
         m
     };
 }
@@ -144,13 +142,13 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
 
     if let Some(lang) = language {
         let mut parser = Parser::new();
-        parser.set_language(lang).expect("Bad language!");
+        parser.set_language(*lang).expect("Bad language!");
         let tree = parser.parse(doc_text, None).expect("Parse failed");
         let root = tree.root_node();
 
-        let query_str = get_query_from_extension(doc_ext).unwrap();
+        let query_str = get_query_from_extension(doc_ext).unwrap_or("".to_string());
 
-        let query = Query::new(lang, &query_str).expect("invalid query");
+        let query = Query::new(*lang, &query_str).expect("invalid query");
 
         let mut cursor = QueryCursor::new();
         let b_text = doc_text.as_bytes();
@@ -327,7 +325,7 @@ fn get_query_from_extension(extension: &str) -> Option<String> {
             "#
             .to_string(),
         ),
-        "toml" => Some(
+        /*"toml" => Some(
             r#"
             ;; TOML: Config structures (tables, keys, arrays)
             (table) @chunk          ;; [table] sections
@@ -337,7 +335,7 @@ fn get_query_from_extension(extension: &str) -> Option<String> {
             (inline_table) @chunk   ;; Inline { } tables
             "#
             .to_string(),
-        ),
+        ),*/
         _ => None,
     }
 }
