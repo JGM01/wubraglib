@@ -1,6 +1,9 @@
 use jwalk::WalkDir;
 use lazy_static::lazy_static;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::{
+    iter::{IntoParallelRefIterator, ParallelIterator},
+    slice::ParallelSliceMut,
+};
 use std::{
     collections::HashMap,
     iter,
@@ -129,6 +132,7 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
         chunks = naive_chunk_document(doc_text, doc_id, next_id);
     };
 
+    chunks.par_sort_unstable_by_key(|c| c.id);
     chunks
 }
 
@@ -143,7 +147,21 @@ fn traverse_and_chunk(
 }
 
 fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec<Chunk> {
-    todo!()
+    let mut chunks = vec![];
+    for para in doc_text.split("\n\n").filter(|p| !p.trim().is_empty()) {
+        let id = next_id.fetch_add(1, Ordering::SeqCst);
+        let tcount = o200k_base().unwrap().encode_ordinary(para).len();
+        chunks.push(Chunk {
+            id,
+            doc_id,
+            text: para.to_string(),
+            chunk_type: "paragraph".to_string(),
+            parent_id: None,
+            children_ids: vec![],
+            token_count: tcount,
+        });
+    }
+    chunks
 }
 
 fn get_query_from_extension(extension: &str) -> &str {
