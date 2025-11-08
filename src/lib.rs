@@ -58,13 +58,38 @@ fn chunk_all_documents(docs: &[Document]) -> (Vec<Chunk>, HashMap<u32, usize>) {
 }
 
 fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU32) -> Vec<Chunk> {
+    let mut chunks = vec![];
+
+    let language = LANGUAGE_MAP.get(doc_ext);
+
+    if let Some(lang) = language {
+        let mut parser = Parser::new();
+        parser.set_language(lang).expect("Bad language!");
+        let tree = parser.parse(doc_text, None).expect("Parse failed");
+        let root = tree.root_node();
+
+        let query = get_query_from_extension(doc_ext);
+
+        todo!()
+    } else {
+        chunks = naive_chunk_document(doc_text, doc_id, next_id);
+    };
+
+    chunks
+}
+
+fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec<Chunk> {
+    todo!()
+}
+
+fn get_query_from_extension(extension: &str) -> Query {
     todo!()
 }
 
 use jwalk::WalkDir;
 use lazy_static::lazy_static;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use tree_sitter::Language;
+use tree_sitter::{Language, Parser, Query};
 
 static ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
