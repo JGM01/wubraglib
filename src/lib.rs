@@ -24,6 +24,15 @@ pub struct DocumentMetadata {
     size_bytes: u64,
 }
 
+lazy_static! {
+    static ref LANGUAGE_MAP: HashMap<&'static str, Language> = {
+        let mut m = HashMap::new();
+        m.insert("rs", tree_sitter_rust::LANGUAGE.into());
+        m.insert("toml", tree_sitter_rust::LANGUAGE.into());
+        m
+    };
+}
+
 fn chunk_all_documents(docs: &[Document]) -> (Vec<Chunk>, HashMap<u32, usize>) {
     let next_id = AtomicU32::new(0);
 
@@ -53,7 +62,9 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
 }
 
 use jwalk::WalkDir;
+use lazy_static::lazy_static;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use tree_sitter::Language;
 
 static ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 

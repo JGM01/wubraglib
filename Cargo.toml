@@ -13,6 +13,8 @@ jwalk = "0.8.1"
 lazy_static = "1.5.0"
 rayon = "1.11.0"
 tree-sitter = "0.25.10"
+tree-sitter-rust = "0.24.0"
+tree-sitter-toml = "0.20.0"
 walkdir = "2.5.0"
 
 [[test]]
