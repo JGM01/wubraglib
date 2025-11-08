@@ -325,17 +325,15 @@ fn get_query_from_extension(extension: &str) -> Option<String> {
             "#
             .to_string(),
         ),
-        /*"toml" => Some(
+        "toml" => Some(
             r#"
-            ;; TOML: Config structures (tables, keys, arrays)
+            ;; TOML: Config structures
             (table) @chunk          ;; [table] sections
             (dotted_key) @chunk     ;; [table.subtable]
-            (pair) @chunk           ;; key = value
-            (array) @chunk          ;; Arrays as chunks
             (inline_table) @chunk   ;; Inline { } tables
             "#
             .to_string(),
-        ),*/
+        ),
         _ => None,
     }
 }
