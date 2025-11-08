@@ -84,9 +84,9 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
         let tree = parser.parse(doc_text, None).expect("Parse failed");
         let root = tree.root_node();
 
-        let query_str = get_query_from_extension(doc_ext);
+        let query_str = get_query_from_extension(doc_ext).unwrap();
 
-        let query = Query::new(lang, query_str).expect("invalid query");
+        let query = Query::new(lang, &query_str).expect("invalid query");
 
         let mut cursor = QueryCursor::new();
         let b_text = doc_text.as_bytes();
@@ -143,7 +143,40 @@ fn traverse_and_chunk(
     doc_id: u32,
     parent_id: Option<u32>,
 ) -> Vec<Chunk> {
-    todo!()
+    let mut children = Vec::new();
+
+    let mut cursor = node.walk();
+
+    for child in node.children(&mut cursor) {
+        if is_chunk_worthy(child.kind()) {
+            let sub_chunks = traverse_and_chunk(&child, doc_text, next_id, doc_id, None);
+            children.extend(sub_chunks);
+        }
+    }
+
+    let chunk_text = &doc_text[node.start_byte() as usize..node.end_byte() as usize];
+    let token_count = o200k_base().unwrap().encode_ordinary(doc_text).len();
+    let id = next_id.fetch_add(1, Ordering::SeqCst);
+    let chunk = Chunk {
+        id,
+        doc_id,
+        text: chunk_text.to_string(),
+        chunk_type: node.kind().to_string(),
+        parent_id,
+        children_ids: children.iter().map(|c| c.id).collect(),
+        token_count,
+    };
+
+    for child in &mut children {
+        if child.parent_id.is_none() {
+            child.parent_id = Some(id);
+        }
+    }
+
+    let mut all = Vec::with_capacity(children.len() + 1);
+    all.extend(children);
+    all.push(chunk);
+    all
 }
 
 fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec<Chunk> {
@@ -163,9 +196,86 @@ fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec
     }
     chunks
 }
+fn is_chunk_worthy(kind: &str) -> bool {
+    if kind.contains("function")
+        || kind.contains("method")
+        || kind.contains("class")
+        || kind == "struct_item"
+        || kind == "impl_item"
+        || kind == "module_item"
+        || kind == "enum_item"
+        || kind == "trait_item"
+        || kind == "variable_declaration"
+        || kind == "arguments"
+        || kind == "expression_statement"
+    {
+        return true;
+    }
 
-fn get_query_from_extension(extension: &str) -> &str {
-    todo!()
+    if kind == "table"
+        || kind == "dotted_key"
+        || kind == "pair"
+        || kind == "array"
+        || kind == "inline_table"
+    {
+        return true;
+    }
+
+    if kind == "arrow_function" {
+        return true;
+    }
+
+    false
+}
+
+fn get_query_from_extension(extension: &str) -> Option<String> {
+    match extension {
+        "rs" => Some(
+            r#"
+            ;; Rust: Semantic items
+            (function_item) @chunk
+            (struct_item) @chunk
+            (impl_item) @chunk
+            (module_item) @chunk
+            (enum_item) @chunk
+            (trait_item) @chunk
+            "#
+            .to_string(),
+        ),
+        "py" => Some(
+            r#"
+            ;; Python: Functions, classes, top-level statements
+            (function_definition) @chunk
+            (class_definition) @chunk
+            (arguments) @chunk  ;; For function signatures if needed
+            (expression_statement) @chunk  ;; Fallback for loose code
+            "#
+            .to_string(),
+        ),
+        "js" => Some(
+            r#"
+            ;; JavaScript: Functions, classes, etc.
+            (function) @chunk
+            (arrow_function) @chunk
+            (class_declaration) @chunk
+            (method_definition) @chunk
+            (variable_declaration) @chunk  ;; For top-level vars
+            "#
+            .to_string(),
+        ),
+        "toml" => Some(
+            r#"
+            ;; TOML: Config structures (tables, keys, arrays)
+            (table) @chunk          ;; [table] sections
+            (dotted_key) @chunk     ;; [table.subtable]
+            (pair) @chunk           ;; key = value
+            (array) @chunk          ;; Arrays as chunks
+            (inline_table) @chunk   ;; Inline { } tables
+            "#
+            .to_string(),
+        ),
+        _ => None,
+    }
 }
 
 static ID_COUNTER: AtomicU32 = AtomicU32::new(0);
