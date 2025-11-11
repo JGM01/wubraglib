@@ -47,8 +47,6 @@ lazy_static! {
         m.insert("h", tree_sitter_c::LANGUAGE.into());
         m.insert("js", tree_sitter_javascript::LANGUAGE.into());
         m.insert("py", tree_sitter_python::LANGUAGE.into());
-        m.insert("swift", tree_sitter_swift::LANGUAGE.into());
-        m.insert("java", tree_sitter_java::LANGUAGE.into());
         m.insert("cu", tree_sitter_cuda::LANGUAGE.into());
         m
     };
@@ -324,28 +322,6 @@ fn get_query_from_extension(extension: &str) -> Option<String> {
             r#"
             ;; HTML fallback: treat entire file as a single chunk
             (element) @chunk
-            "#
-            .to_string(),
-        ),
-        "swift" => Some(
-            r#"
-            ;; Swift top-level items
-            (function_declaration) @chunk
-            (class_declaration) @chunk
-            (struct_declaration) @chunk
-            (enum_declaration) @chunk
-            (protocol_declaration) @chunk
-            (extension_declaration) @chunk
-            "#
-            .to_string(),
-        ),
-        "java" => Some(
-            r#"
-            ;; Java top-level items
-            (class_declaration) @chunk
-            (function_declaration) @chunk
-            (interface_declaration) @chunk
-            (enum_declaration) @chunk
             "#
             .to_string(),
         ),
