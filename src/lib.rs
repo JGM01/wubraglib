@@ -147,7 +147,6 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
         let root = tree.root_node();
 
         let query_str = get_query_from_extension(doc_ext).unwrap_or("".to_string());
-
         let query = Query::new(*lang, &query_str).expect("invalid query");
 
         let mut cursor = QueryCursor::new();
@@ -165,29 +164,9 @@ fn chunk_document(doc_id: u32, doc_text: &str, doc_ext: &str, next_id: &AtomicU3
         while let Some(m) = qmatches.next() {
             for capture in m.captures {
                 let node = capture.node;
-                let mut children = traverse_and_chunk(&node, doc_text, next_id, doc_id, None);
+                let children = traverse_and_chunk(&node, doc_text, next_id, doc_id, None);
 
-                let chunk_text = &doc_text[node.start_byte()..node.end_byte()];
-                let chunk_token_count = o200k_base().unwrap().encode_ordinary(doc_text).len();
-                let id = next_id.fetch_add(1, Ordering::SeqCst);
-
-                let chunk = Chunk {
-                    id,
-                    doc_id,
-                    text: chunk_text.to_string(),
-                    chunk_type: node.kind().to_string(),
-                    parent_id: None,
-                    children_ids: children.iter().map(|c| c.id).collect(),
-                    token_count: chunk_token_count,
-                };
-
-                for child in &mut children {
-                    if child.parent_id.is_none() {
-                        child.parent_id = Some(id);
-                    }
-                }
                 chunks.extend(children);
-                chunks.push(chunk);
             }
         }
     } else {
@@ -205,20 +184,23 @@ fn traverse_and_chunk(
     doc_id: u32,
     parent_id: Option<u32>,
 ) -> Vec<Chunk> {
-    let mut children = Vec::new();
+    let id = next_id.fetch_add(1, Ordering::SeqCst);
 
+    let mut children = Vec::new();
     let mut cursor = node.walk();
 
     for child in node.children(&mut cursor) {
         if is_chunk_worthy(child.kind()) {
-            let sub_chunks = traverse_and_chunk(&child, doc_text, next_id, doc_id, None);
+            let sub_chunks = traverse_and_chunk(&child, doc_text, next_id, doc_id, Some(id));
             children.extend(sub_chunks);
         }
     }
 
-    let chunk_text = &doc_text[node.start_byte() as usize..node.end_byte() as usize];
-    let token_count = o200k_base().unwrap().encode_ordinary(doc_text).len();
-    let id = next_id.fetch_add(1, Ordering::SeqCst);
+    let start = node.start_byte() as usize;
+    let end = node.end_byte() as usize;
+    let chunk_text = &doc_text[start..end];
+    let token_count = o200k_base().unwrap().encode_ordinary(chunk_text).len();
+
     let chunk = Chunk {
         id,
         doc_id,
@@ -228,12 +210,6 @@ fn traverse_and_chunk(
         children_ids: children.iter().map(|c| c.id).collect(),
         token_count,
     };
-
-    for child in &mut children {
-        if child.parent_id.is_none() {
-            child.parent_id = Some(id);
-        }
-    }
 
     let mut all = Vec::with_capacity(children.len() + 1);
     all.extend(children);
@@ -274,12 +250,7 @@ fn is_chunk_worthy(kind: &str) -> bool {
         return true;
     }
 
-    if kind == "table"
-        || kind == "dotted_key"
-        || kind == "pair"
-        || kind == "array"
-        || kind == "inline_table"
-    {
+    if kind == "table" || kind == "dotted_key" || kind == "array" || kind == "inline_table" {
         return true;
     }
 
