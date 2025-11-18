@@ -7,7 +7,6 @@ use rayon::{
 };
 use std::{
     collections::HashMap,
-    error::Error,
     iter,
     path::Path,
     sync::atomic::{AtomicU32, Ordering},
@@ -23,6 +22,12 @@ pub struct Chunk {
     pub char_count: usize,  // amount of tokens for logic stuff
 }
 
+pub struct Index {
+    pub chunks: Vec<Chunk>,
+    pub id_to_idx: HashMap<u32, usize>,
+    pub embeddings: Vec<Vec<f32>>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Document {
     pub id: u32,
@@ -35,6 +40,10 @@ pub struct Document {
 pub struct DocumentMetadata {
     extension: String,
     size_bytes: u64,
+}
+
+pub fn create_index() -> Index {
+    todo!()
 }
 
 pub fn embed_chunks(chunks: &mut Vec<Chunk>) -> Vec<Vec<f32>> {
