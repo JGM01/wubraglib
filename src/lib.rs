@@ -28,6 +28,22 @@ pub struct Index {
     pub embeddings: Vec<Vec<f32>>,
 }
 
+impl Index {
+    pub fn new(chunks: Vec<Chunk>, embeddings: Vec<Vec<f32>>) -> Self {
+        let id_to_idx = chunks
+            .iter()
+            .enumerate()
+            .map(|(i, ch)| (ch.id, i))
+            .collect();
+
+        Self {
+            chunks,
+            embeddings,
+            id_to_idx,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Document {
     pub id: u32,
@@ -40,18 +56,6 @@ pub struct Document {
 pub struct DocumentMetadata {
     extension: String,
     size_bytes: u64,
-}
-
-pub fn create_index(chunks: &[Chunk], embeddings: Vec<Vec<f32>>) -> Index {
-    Index {
-        chunks: chunks.to_vec(),
-        id_to_idx: chunks
-            .iter()
-            .enumerate()
-            .map(|(idx, chunk)| (chunk.id, idx))
-            .collect(),
-        embeddings,
-    }
 }
 
 pub fn embed_chunks(chunks: &mut Vec<Chunk>) -> Vec<Vec<f32>> {
