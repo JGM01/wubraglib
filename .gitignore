@@ -10,4 +10,5 @@ tests/examples
 
 **/mutants.out*/
 
+.fastembed_cache/
 .DS_Store
