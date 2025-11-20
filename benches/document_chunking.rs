@@ -7,7 +7,7 @@ fn bench_chunk_for_dir(c: &mut Criterion, name: &str, dir: &str) {
     let root_path = Path::new(dir);
     let docs = grab_all_documents(std::hint::black_box(&root_path));
 
-    let chunker = Chunker::new(0);
+    let chunker = Chunker::new();
 
     c.bench_function(name, |b| {
         b.iter(|| {

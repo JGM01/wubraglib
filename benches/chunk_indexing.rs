@@ -8,7 +8,7 @@ fn bench_embed_for_dir(c: &mut Criterion, name: &str, dir: &str) {
 
     let docs = grab_all_documents(std::hint::black_box(&root_path));
 
-    let chunker = Chunker::new(0);
+    let chunker = Chunker::new();
     let (mut chunks, _) = chunker.chunk_all_documents(std::hint::black_box(&docs));
 
     let mut embedder = Embedder::new();

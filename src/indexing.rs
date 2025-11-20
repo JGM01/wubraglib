@@ -5,12 +5,12 @@ use rayon::{
     slice::ParallelSliceMut,
 };
 
-use crate::chunking::Chunk;
+use crate::chunking::{Chunk, ChunkID};
 
 pub struct Index {
     pub chunks: Vec<Chunk>,
     pub embeddings: Vec<Vec<f32>>,
-    id_to_idx: HashMap<u32, usize>,
+    id_to_idx: HashMap<ChunkID, usize>,
 }
 
 impl Index {
