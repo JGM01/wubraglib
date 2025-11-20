@@ -5,9 +5,15 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
+pub type DocumentID = [u8; 32];
+
+fn compute_document_id(path: &str, content: &str) -> DocumentID {
+    todo!()
+}
+
 #[derive(Debug, Clone)]
 pub struct Document {
-    pub id: u32,
+    pub id: DocumentID,
     pub path: String,
     pub text: String,
     pub meta: DocumentMetadata,
@@ -18,8 +24,6 @@ pub struct DocumentMetadata {
     pub extension: String,
     pub size_bytes: u64,
 }
-
-static DOC_ID: AtomicU32 = AtomicU32::new(0);
 
 pub fn grab_all_documents(root: &Path) -> Vec<Document> {
     let paths: Vec<_> = WalkDir::new(root)
@@ -52,8 +56,10 @@ fn load_document(root: &Path, relative: &Path) -> Option<Document> {
         size_bytes: path.metadata().ok()?.len(),
     };
 
+    let id: DocumentID = compute_document_id(&relative.display().to_string(), &text);
+
     Some(Document {
-        id: DOC_ID.fetch_add(1, Ordering::SeqCst),
+        id,
         path: relative.display().to_string(),
         text,
         meta,

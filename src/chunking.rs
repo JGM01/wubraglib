@@ -1,35 +1,36 @@
 use lazy_static::lazy_static;
 use rayon::prelude::*;
-use std::{
-    collections::HashMap,
-    iter,
-    sync::atomic::{AtomicU32, Ordering},
-};
+use std::{collections::HashMap, iter};
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator};
 
-use crate::document::Document;
+use crate::document::{Document, DocumentID};
+
+pub type ChunkID = [u8; 32];
+
+fn compute_chunk_id(doc_id: &DocumentID, chunk_text: &str) -> ChunkID {
+    todo!()
+}
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    pub id: u32,            // primary key
-    pub doc_id: u32,        // foreign key id of the document that the chunk is attached to
+    pub id: ChunkID,        // primary key
+    pub doc_id: DocumentID, // foreign key id of the document that the chunk is attached to
     pub text: String,       // content of the chunk
     pub chunk_type: String, // whatever is returned by node.kind() with tree-sitter (or "paragraph"/"document")
     pub char_count: usize,  // amount of characters
 }
 
-pub struct Chunker {
-    next_id: AtomicU32,
-}
+pub struct Chunker {}
 
 impl Chunker {
-    pub fn new(initial_id: u32) -> Self {
-        Self {
-            next_id: AtomicU32::new(initial_id),
-        }
+    pub fn new() -> Self {
+        Self {}
     }
 
-    pub fn chunk_all_documents(&self, docs: &[Document]) -> (Vec<Chunk>, HashMap<u32, usize>) {
+    pub fn chunk_all_documents(
+        &self,
+        docs: &[Document],
+    ) -> (Vec<Chunk>, HashMap<DocumentID, usize>) {
         let doc_chunks_vec: Vec<Vec<Chunk>> = docs
             .par_iter()
             .map(|doc| self.chunk_document(doc.id, &doc.text, &doc.meta.extension))
@@ -41,7 +42,7 @@ impl Chunker {
             all_chunks.append(&mut v);
         }
 
-        let id_to_idx: HashMap<u32, usize> = all_chunks
+        let id_to_idx: HashMap<DocumentID, usize> = all_chunks
             .iter()
             .enumerate()
             .map(|(idx, chunk)| (chunk.id, idx))
@@ -50,16 +51,12 @@ impl Chunker {
         (all_chunks, id_to_idx)
     }
 
-    fn chunk_document(&self, doc_id: u32, doc_text: &str, doc_ext: &str) -> Vec<Chunk> {
+    fn chunk_document(&self, doc_id: DocumentID, doc_text: &str, doc_ext: &str) -> Vec<Chunk> {
         if let Some(lang) = LANGUAGE_MAP.get(doc_ext) {
-            chunk_with_treesitter(doc_id, doc_text, doc_ext, lang, &self.next_id)
+            chunk_with_treesitter(doc_id, doc_text, doc_ext, lang)
         } else {
-            naive_chunk_document(doc_text, doc_id, &self.next_id)
+            naive_chunk_document(doc_text, doc_id)
         }
-    }
-
-    pub fn next_id_value(&self) -> u32 {
-        self.next_id.load(Ordering::SeqCst)
     }
 }
 
@@ -79,11 +76,10 @@ lazy_static! {
 }
 
 fn chunk_with_treesitter(
-    doc_id: u32,
+    doc_id: DocumentID,
     doc_text: &str,
     doc_ext: &str,
     lang: &Language,
-    next_id: &AtomicU32,
 ) -> Vec<Chunk> {
     let mut chunks = vec![];
 
@@ -92,7 +88,7 @@ fn chunk_with_treesitter(
     let tree = match parser.parse(doc_text, None) {
         Some(t) => t,
         None => {
-            return naive_chunk_document(doc_text, doc_id, next_id);
+            return naive_chunk_document(doc_text, doc_id);
         }
     };
     let root = tree.root_node();
@@ -102,7 +98,7 @@ fn chunk_with_treesitter(
         Ok(q) => q,
         Err(_) => {
             // invalid query — fallback to naive
-            return naive_chunk_document(doc_text, doc_id, next_id);
+            return naive_chunk_document(doc_text, doc_id);
         }
     };
 
@@ -131,7 +127,7 @@ fn chunk_with_treesitter(
                 continue;
             }
             let token_count = chunk_text.len();
-            let id = next_id.fetch_add(1, Ordering::SeqCst);
+            let id = compute_chunk_id(&doc_id, chunk_text);
             chunks.push(Chunk {
                 id,
                 doc_id,
@@ -143,7 +139,7 @@ fn chunk_with_treesitter(
     }
 
     if chunks.is_empty() {
-        let id = next_id.fetch_add(1, Ordering::SeqCst);
+        let id = compute_chunk_id(&doc_id, &doc_text.trim().to_string());
         chunks.push(Chunk {
             id,
             doc_id,
@@ -157,10 +153,10 @@ fn chunk_with_treesitter(
     chunks
 }
 
-fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec<Chunk> {
+fn naive_chunk_document(doc_text: &str, doc_id: DocumentID) -> Vec<Chunk> {
     let mut chunks = vec![];
     for para in doc_text.split("\n\n").filter(|p| !p.trim().is_empty()) {
-        let id = next_id.fetch_add(1, Ordering::SeqCst);
+        let id = compute_chunk_id(&doc_id, &para.to_string());
         let tcount = para.len();
         chunks.push(Chunk {
             id,
@@ -172,7 +168,7 @@ fn naive_chunk_document(doc_text: &str, doc_id: u32, next_id: &AtomicU32) -> Vec
     }
 
     if chunks.is_empty() {
-        let id = next_id.fetch_add(1, Ordering::SeqCst);
+        let id = compute_chunk_id(&doc_id, &doc_text.trim().to_string());
         chunks.push(Chunk {
             id,
             doc_id,
