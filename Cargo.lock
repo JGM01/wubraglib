@@ -3933,6 +3933,7 @@ dependencies = [
  "lazy_static",
  "rayon",
  "sha2",
+ "thiserror 2.0.17",
  "tree-sitter",
  "tree-sitter-c",
  "tree-sitter-cpp",

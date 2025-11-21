@@ -8,8 +8,7 @@ fn bench_grab_for_dir(c: &mut Criterion, name: &str, dir: &str) {
 
     c.bench_function(name, |b| {
         b.iter(|| {
-            let docs = grab_all_documents(std::hint::black_box(&root_path));
-            std::hint::black_box(docs);
+            let _ = grab_all_documents(std::hint::black_box(&root_path));
         })
     });
 }

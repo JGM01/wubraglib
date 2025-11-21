@@ -5,7 +5,15 @@ use wubrag::{chunking::Chunker, document::grab_all_documents};
 
 fn bench_chunk_for_dir(c: &mut Criterion, name: &str, dir: &str) {
     let root_path = Path::new(dir);
-    let docs = grab_all_documents(std::hint::black_box(&root_path));
+    let docs = grab_all_documents(std::hint::black_box(&root_path))
+        .map_err(|e| {
+            eprintln!(
+                "Failed to load documents from {}: {}",
+                root_path.display(),
+                e
+            )
+        })
+        .unwrap();
 
     let chunker = Chunker::new();
 
