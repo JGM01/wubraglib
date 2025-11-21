@@ -17,13 +17,8 @@ pub struct Document {
     pub id: DocumentID,
     pub path: String,
     pub text: String,
-    pub meta: DocumentMetadata,
-}
-
-#[derive(Debug, Clone)]
-pub struct DocumentMetadata {
-    pub extension: String,
-    pub size_bytes: u64,
+    pub ext: String,
+    pub size: u64,
 }
 
 pub fn grab_all_documents(root: &Path) -> Vec<Document> {
@@ -48,14 +43,12 @@ fn load_document(root: &Path, relative: &Path) -> Option<Document> {
     let path = root.join(relative);
     let text = std::fs::read_to_string(&path).ok()?;
 
-    let meta = DocumentMetadata {
-        extension: path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_string(),
-        size_bytes: path.metadata().ok()?.len(),
-    };
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_string();
+    let size = path.metadata().ok()?.len();
 
     let id: DocumentID = compute_document_id(&relative.display().to_string(), &text);
 
@@ -63,6 +56,7 @@ fn load_document(root: &Path, relative: &Path) -> Option<Document> {
         id,
         path: relative.display().to_string(),
         text,
-        meta,
+        ext,
+        size,
     })
 }

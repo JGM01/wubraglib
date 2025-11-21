@@ -37,7 +37,7 @@ impl Chunker {
     ) -> (Vec<Chunk>, HashMap<DocumentID, usize>) {
         let doc_chunks_vec: Vec<Vec<Chunk>> = docs
             .par_iter()
-            .map(|doc| self.chunk_document(doc.id, &doc.text, &doc.meta.extension))
+            .map(|doc| self.chunk_document(&doc))
             .collect();
 
         let mut all_chunks =
@@ -55,11 +55,11 @@ impl Chunker {
         (all_chunks, id_to_idx)
     }
 
-    fn chunk_document(&self, doc_id: DocumentID, doc_text: &str, doc_ext: &str) -> Vec<Chunk> {
-        if let Some(lang) = LANGUAGE_MAP.get(doc_ext) {
-            chunk_with_treesitter(doc_id, doc_text, doc_ext, lang)
+    fn chunk_document(&self, doc: &Document) -> Vec<Chunk> {
+        if let Some(lang) = LANGUAGE_MAP.get(&doc.ext.as_str()) {
+            chunk_with_treesitter(&doc, lang)
         } else {
-            naive_chunk_document(doc_text, doc_id)
+            naive_chunk_document(&doc.text, doc.id)
         }
     }
 }
@@ -79,35 +79,30 @@ lazy_static! {
     };
 }
 
-fn chunk_with_treesitter(
-    doc_id: DocumentID,
-    doc_text: &str,
-    doc_ext: &str,
-    lang: &Language,
-) -> Vec<Chunk> {
+fn chunk_with_treesitter(doc: &Document, lang: &Language) -> Vec<Chunk> {
     let mut chunks = vec![];
 
     let mut parser = Parser::new();
     parser.set_language(lang).expect("Bad language for parser");
-    let tree = match parser.parse(doc_text, None) {
+    let tree = match parser.parse(&doc.text, None) {
         Some(t) => t,
         None => {
-            return naive_chunk_document(doc_text, doc_id);
+            return naive_chunk_document(&doc.text, doc.id);
         }
     };
     let root = tree.root_node();
 
-    let query_str = get_query_from_extension(doc_ext).unwrap_or_default();
+    let query_str = get_query_from_extension(&doc.ext).unwrap_or_default();
     let query = match Query::new(lang, &query_str) {
         Ok(q) => q,
         Err(_) => {
             // invalid query — fallback to naive
-            return naive_chunk_document(doc_text, doc_id);
+            return naive_chunk_document(&doc.text, doc.id);
         }
     };
 
     let mut cursor = QueryCursor::new();
-    let b_text = doc_text.as_bytes();
+    let b_text = doc.text.as_bytes();
 
     let text_callback = |node: Node| {
         let start = node.start_byte() as usize;
@@ -123,18 +118,18 @@ fn chunk_with_treesitter(
             let node = capture.node;
             let start = node.start_byte() as usize;
             let end = node.end_byte() as usize;
-            if start >= doc_text.len() || end > doc_text.len() || start >= end {
+            if start >= doc.text.len() || end > doc.text.len() || start >= end {
                 continue;
             }
-            let chunk_text = &doc_text[start..end].trim();
+            let chunk_text = &doc.text[start..end].trim();
             if chunk_text.is_empty() {
                 continue;
             }
             let token_count = chunk_text.len();
-            let id = compute_chunk_id(&doc_id, chunk_text);
+            let id = compute_chunk_id(&doc.id, chunk_text);
             chunks.push(Chunk {
                 id,
-                doc_id,
+                doc_id: doc.id,
                 text: chunk_text.to_string(),
                 chunk_type: node.kind().to_string(),
                 char_count: token_count,
@@ -143,13 +138,13 @@ fn chunk_with_treesitter(
     }
 
     if chunks.is_empty() {
-        let id = compute_chunk_id(&doc_id, &doc_text.trim().to_string());
+        let id = compute_chunk_id(&doc.id, &doc.text.trim().to_string());
         chunks.push(Chunk {
             id,
-            doc_id,
-            text: doc_text.trim().to_string(),
+            doc_id: doc.id,
+            text: doc.text.trim().to_string(),
             chunk_type: "document".to_string(),
-            char_count: doc_text.len(),
+            char_count: doc.text.len(),
         });
     }
 
