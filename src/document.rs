@@ -1,9 +1,8 @@
-use crate::error::{RAGError, Result};
 use jwalk::WalkDir;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha2::Digest;
-use simdutf8::basic::from_utf8;
-use std::{io, path::Path};
+use std::path::Path;
+
 pub type DocumentID = [u8; 32];
 
 fn compute_document_id(path: &str, content: &str) -> DocumentID {
@@ -22,61 +21,38 @@ pub struct Document {
     pub size: u64,
 }
 
-pub fn grab_all_documents(root: &Path) -> Result<Vec<Document>> {
-    if !root.exists() {
-        return Err(RAGError::Io(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Root path does not exist: {}", root.display()),
-        )));
-    }
-
+pub fn grab_all_documents(root: &Path) -> Vec<Document> {
     let paths: Vec<_> = WalkDir::new(root)
         .into_iter()
-        .filter_map(|e| match e {
-            Ok(entry) if entry.file_type().is_file() => entry
-                .path()
-                .strip_prefix(root)
-                .ok()
-                .map(|p| p.to_path_buf()),
-            Ok(_) => None,
-            Err(err) => {
-                eprintln!("Warning: Failed to walk directory entry: {}", err);
-                None
-            }
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter_map(|e| {
+            let binding = e.path();
+            let rel = binding.strip_prefix(root).ok()?;
+            Some(rel.to_string_lossy().into_owned())
         })
         .collect();
 
-    let results: Result<Vec<Document>> = paths
+    paths
         .par_iter()
-        .map(|relative| load_document(root, relative))
-        .collect();
-
-    results
+        .filter_map(|relative| load_document(root, Path::new(relative)))
+        .collect()
 }
 
-fn load_document(root: &Path, relative: &Path) -> Result<Document> {
+fn load_document(root: &Path, relative: &Path) -> Option<Document> {
     let path = root.join(relative);
-    let metadata = std::fs::metadata(&path).map_err(|e| RAGError::FileRead {
-        path: path.clone(),
-        source: e,
-    })?;
-
-    let text = std::fs::read_to_string(&path).map_err(|e| RAGError::FileRead {
-        path: path.clone(),
-        source: e,
-    })?;
+    let text = std::fs::read_to_string(&path).ok()?;
 
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_string();
-
-    let size = metadata.len();
+    let size = path.metadata().ok()?.len();
 
     let id: DocumentID = compute_document_id(&relative.display().to_string(), &text);
 
-    Ok(Document {
+    Some(Document {
         id,
         path: relative.display().to_string(),
         text,
