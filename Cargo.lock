@@ -3937,6 +3937,7 @@ dependencies = [
  "indicatif 0.18.3",
  "jwalk",
  "lazy_static",
+ "log",
  "rayon",
  "sha2",
  "simdutf8",
