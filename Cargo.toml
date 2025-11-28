@@ -47,6 +47,6 @@ harness = false
 [[bench]]
 name = "document_chunking"
 harness = false
-#[[bench]]
-#name = "chunk_indexing"
-#harness = false
+[[bench]]
+name = "chunk_indexing"
+harness = false

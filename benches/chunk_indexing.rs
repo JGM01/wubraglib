@@ -40,7 +40,11 @@ fn bench_embed_dolphin(c: &mut Criterion) {
 }
 
 fn bench_embed_ratatui(c: &mut Criterion) {
-    bench_embed_for_dir(c, "embed_ratatui", "tests/examples/ratatui/src/buffer");
+    bench_embed_for_dir(
+        c,
+        "embed_ratatui",
+        "tests/examples/ratatui/ratatui-core/src/buffer",
+    );
 }
 
 criterion_group! {
