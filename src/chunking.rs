@@ -1,8 +1,8 @@
 use lazy_static::lazy_static;
 use rayon::prelude::*;
 use sha2::Digest;
-use std::{collections::HashMap, iter};
-use tree_sitter::{Language, Node, Parser, Query, QueryCursor, StreamingIterator};
+use std::collections::HashMap;
+use tree_sitter::{Language, Parser, Query, QueryCursor, StreamingIterator};
 
 use crate::document::{Document, DocumentID};
 
@@ -69,47 +69,92 @@ fn chunk_with_treesitter(doc: &Document, lang: &Language) -> Vec<Chunk> {
     };
     let root = tree.root_node();
 
-    let query_str = get_query_from_extension(&doc.ext).unwrap_or_default();
-    let query = match Query::new(lang, &query_str) {
-        Ok(q) => q,
-        Err(_) => {
-            // invalid query — fallback to naive
-            return naive_chunk_document(&doc.text, doc.id);
+    // Get both container and function queries
+    let (container_query_str, function_query_str) = get_queries_from_extension(&doc.ext);
+
+    // Process container-level chunks (classes, structs, etc.)
+    if let Some(container_str) = container_query_str {
+        if let Ok(query) = Query::new(lang, &container_str) {
+            let mut cursor = QueryCursor::new();
+            let b_text = doc.text.as_bytes();
+            let mut qmatches = cursor.matches(&query, root, b_text);
+
+            while let Some(m) = qmatches.next() {
+                for capture in m.captures {
+                    let node = capture.node;
+
+                    let is_top_level = node
+                        .parent()
+                        .map(|p| {
+                            p.kind() == "source_file"
+                                || p.kind() == "module"
+                                || p.kind() == "program"
+                        })
+                        .unwrap_or(false);
+
+                    if !is_top_level {
+                        continue;
+                    }
+
+                    let raw_text = node.utf8_text(doc.text.as_bytes()).ok().expect(":D");
+                    if raw_text.trim().is_empty() {
+                        continue;
+                    }
+
+                    let id = compute_chunk_id(&doc.id, raw_text);
+
+                    chunks.push(Chunk {
+                        id,
+                        doc_id: doc.id,
+                        text: raw_text.trim().to_string(),
+                        chunk_type: node.kind(),
+                        char_count: raw_text.len(),
+                    });
+                }
+            }
         }
-    };
+    }
 
-    let mut cursor = QueryCursor::new();
-    let b_text = doc.text.as_bytes();
+    // Process function-level chunks
+    if let Some(function_str) = function_query_str {
+        if let Ok(query) = Query::new(lang, &function_str) {
+            let mut cursor = QueryCursor::new();
+            let b_text = doc.text.as_bytes();
+            let mut qmatches = cursor.matches(&query, root, b_text);
 
-    let mut qmatches = cursor.matches(&query, root, b_text);
+            while let Some(m) = qmatches.next() {
+                for capture in m.captures {
+                    let node = capture.node;
 
-    while let Some(m) = qmatches.next() {
-        for capture in m.captures {
-            let node = capture.node;
+                    let is_top_level = node
+                        .parent()
+                        .map(|p| {
+                            p.kind() == "source_file"
+                                || p.kind() == "module"
+                                || p.kind() == "program"
+                        })
+                        .unwrap_or(false);
 
-            let is_top_level = node
-                .parent()
-                .map(|p| p.kind() == "source_file" || p.kind() == "module")
-                .unwrap_or(false);
+                    if !is_top_level {
+                        continue;
+                    }
 
-            if !is_top_level {
-                continue;
+                    let raw_text = node.utf8_text(doc.text.as_bytes()).ok().expect(":D");
+                    if raw_text.trim().is_empty() {
+                        continue;
+                    }
+
+                    let id = compute_chunk_id(&doc.id, raw_text);
+
+                    chunks.push(Chunk {
+                        id,
+                        doc_id: doc.id,
+                        text: raw_text.trim().to_string(),
+                        chunk_type: node.kind(),
+                        char_count: raw_text.len(),
+                    });
+                }
             }
-
-            let raw_text = node.utf8_text(doc.text.as_bytes()).ok().expect(":D");
-            if raw_text.trim().is_empty() {
-                continue;
-            }
-
-            let id = compute_chunk_id(&doc.id, raw_text);
-
-            chunks.push(Chunk {
-                id,
-                doc_id: doc.id,
-                text: raw_text.trim().to_string(),
-                chunk_type: node.kind(),
-                char_count: raw_text.len(),
-            });
         }
     }
 
@@ -155,73 +200,128 @@ fn naive_chunk_document(doc_text: &str, doc_id: DocumentID) -> Vec<Chunk> {
     chunks
 }
 
-fn get_query_from_extension(extension: &str) -> Option<String> {
+// Returns (container_query, function_query)
+fn get_queries_from_extension(extension: &str) -> (Option<String>, Option<String>) {
     match extension {
-        "rs" => Some(
-            r#"
-            ;; Rust top-level items
-            (function_item) @chunk
-            (struct_item) @chunk
-            (impl_item) @chunk
-            (mod_item) @chunk
-            (enum_item) @chunk
-            (trait_item) @chunk
-            "#
-            .to_string(),
+        "rs" => (
+            // Container-level chunks
+            Some(
+                r#"
+                ;; Rust container items
+                (struct_item) @chunk
+                (impl_item) @chunk
+                (mod_item) @chunk
+                (enum_item) @chunk
+                (trait_item) @chunk
+                "#
+                .to_string(),
+            ),
+            // Function-level chunks
+            Some(
+                r#"
+                ;; Rust functions
+                (function_item) @chunk
+                "#
+                .to_string(),
+            ),
         ),
-        "py" => Some(
-            r#"
-            ;; Python top-level definitions
-            (function_definition) @chunk
-            (class_definition) @chunk
-            "#
-            .to_string(),
+        "py" => (
+            // Container-level chunks
+            Some(
+                r#"
+                ;; Python classes
+                (class_definition) @chunk
+                "#
+                .to_string(),
+            ),
+            // Function-level chunks
+            Some(
+                r#"
+                ;; Python functions
+                (function_definition) @chunk
+                "#
+                .to_string(),
+            ),
         ),
-        "js" => Some(
-            r#"
-            ;; JavaScript / TypeScript top-level definitions
-            (function_declaration) @chunk
-            (arrow_function) @chunk
-            (class_declaration) @chunk
-            (method_definition) @chunk
-            (variable_declaration) @chunk
-            "#
-            .to_string(),
+        "js" => (
+            // Container-level chunks
+            Some(
+                r#"
+                ;; JavaScript/TypeScript classes
+                (class_declaration) @chunk
+                "#
+                .to_string(),
+            ),
+            // Function-level chunks
+            Some(
+                r#"
+                ;; JavaScript/TypeScript functions
+                (function_declaration) @chunk
+                (arrow_function) @chunk
+                (method_definition) @chunk
+                (variable_declaration) @chunk
+                "#
+                .to_string(),
+            ),
         ),
-        "c" => Some(
-            r#"
-            ;; C top-level items
-            (function_definition) @chunk
-            (struct_specifier) @chunk
-            (union_specifier) @chunk
-            (enum_specifier) @chunk
-            (declaration
-                (type_specifier) @type_decl
-            ) @chunk
-            "#
-            .to_string(),
+        "c" => (
+            // Container-level chunks
+            Some(
+                r#"
+                ;; C containers
+                (struct_specifier) @chunk
+                (union_specifier) @chunk
+                (enum_specifier) @chunk
+                "#
+                .to_string(),
+            ),
+            // Function-level chunks
+            Some(
+                r#"
+                ;; C functions
+                (function_definition) @chunk
+                (declaration
+                    (type_specifier) @type_decl
+                ) @chunk
+                "#
+                .to_string(),
+            ),
         ),
-        "cpp" | "cu" => Some(
-            r#"
-            ;; C++ / CUDA top-level items
-            (function_definition) @chunk
-            (class_specifier) @chunk
-            (struct_specifier) @chunk
-            (enum_specifier) @chunk
-            (template_declaration) @chunk
-            (declaration
-                (type_specifier) @type_decl
-            ) @chunk
-            "#
-            .to_string(),
+        "cpp" | "cu" => (
+            // Container-level chunks
+            Some(
+                r#"
+                ;; C++/CUDA containers
+                (class_specifier) @chunk
+                (struct_specifier) @chunk
+                (enum_specifier) @chunk
+                (namespace_definition) @chunk
+                "#
+                .to_string(),
+            ),
+            // Function-level chunks
+            Some(
+                r#"
+                ;; C++/CUDA functions
+                (function_definition) @chunk
+                (template_declaration) @chunk
+                (declaration
+                    (type_specifier) @type_decl
+                ) @chunk
+                "#
+                .to_string(),
+            ),
         ),
-        "html" => Some(
-            r#"
-            ;; HTML fallback: treat top-level elements as chunks
-            (element) @chunk
-            "#
-            .to_string(),
+        "html" => (
+            Some(
+                r#"
+                ;; HTML fallback: treat top-level elements as chunks
+                (element) @chunk
+                "#
+                .to_string(),
+            ),
+            None,
         ),
-        _ => None,
+        _ => (None, None),
     }
 }
